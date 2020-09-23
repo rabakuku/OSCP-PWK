@@ -2,6 +2,7 @@ Nmap, short for Network Mapper, is a free, open-source tool for vulnerability sc
 Network administrators use Nmap to identify what devices are running on their systems, 
 discovering hosts that are available and the services they offer, finding open ports and detecting security risks.
 
+Thanks to: https://github.com/gajos112
 
 -----------------------------SIMPLE SCAN----------------------------
 
@@ -11,7 +12,7 @@ Scan a single IP
 - nmap 127.0.0.1
 
 Scan a host
-- nmap www.testhostname.com
+- nmap www.ccdtt.com
 
 Scan a range of IPs
 - nmap 127.0.0.1-20
@@ -33,10 +34,10 @@ Scan a single Port
 Scan a range of ports
 - nmap -p 1-100 127.0.0.1
 
-Scan 100 most common ports (Fast)   <-----------------FAST TEST
+Scan 100 most common ports (Fast)   
 - nmap -F 127.0.0.1
 
-Scan all 65535 ports  <-----------------ALL PORTS
+Scan all 65535 ports  
 - nmap -p- 127.0.0.1
 
 -----------------------------SCAN TYPES----------------------------
@@ -63,7 +64,7 @@ Detect OS and Services
 - nmap -A 127.0.0.1 
 
 Standard service detection
-- nmap -sV 127.0.0.1 <-----------------SERVICE VERSION
+- nmap -sV 127.0.0.1 
 
 More aggressive Service Detection
 - nmap -sV --version-intensity 5 127.0.0.1
@@ -115,6 +116,10 @@ The option --script-help=$scriptname will display help for the individual script
 
 You will notice I have used the -sV service detection parameter. Generally most NSE scripts will be more effective and you will get better coverage by including service detection.
 
+-----------------------------IP ENUMERATION----------------------------------
+
+9. Find Information about IP address
+- nmap --script=asn-query,whois,ip-geolocation-maxmind 192.168.1.0/24
 
 -----------------------------HTTP SERVICES----------------------------------
 
@@ -137,7 +142,3 @@ There are many HTTP information gathering scripts, here are a few that are simpl
 
 Heartbleed detection is one of the available SSL scripts. It will detect the presence of the well known Heartbleed vulnerability in SSL services. Specify alternative ports to test SSL on mail and other protocols (Requires Nmap 6.46).
 
------------------------------IP ENUMERATION----------------------------------
-
-9. Find Information about IP address
-- nmap --script=asn-query,whois,ip-geolocation-maxmind 192.168.1.0/24

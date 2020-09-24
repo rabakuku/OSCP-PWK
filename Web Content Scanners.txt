@@ -1,1 +1,2 @@
 Dirb http://127.0.0.1 -r <--- Non-Recursive scan with no wordlist
+dirsearch -u http://boilerctf.thm -e php -f -x 400,403

